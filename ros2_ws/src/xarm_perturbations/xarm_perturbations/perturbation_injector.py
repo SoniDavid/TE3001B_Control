@@ -62,11 +62,31 @@ class PerturbationGenerator(Node):
 
         self.timer = self.create_timer(self.publish_period_s, self.tick)
 
+        # Build a human-readable parameter summary so the exact numerical values
+        # are always visible in the log (required for reproducibility in reports).
+        if self.mode == "sine":
+            mode_detail = (
+                f"sine_freq_hz={self.sine_freq_hz} Hz  "
+                f"sine_amp_linear={self.sine_amp_linear} m/s  "
+                f"sine_axis={self.sine_axis}"
+            )
+        elif self.mode == "gaussian":
+            mode_detail = (
+                f"noise_std_linear (sigma)={self.noise_std_linear} m/s  "
+                f"[applied to all 3 axes independently, seed=7]"
+            )
+        else:
+            mode_detail = "no perturbation output"
+
         self.get_logger().info(
-            "✅ xarm_perturbation_injector (GENERATOR)\n"
-            f"   OUT: {self.output_topic}\n"
-            f"   mode={self.mode}, enabled={self.enabled}\n"
-            f"   PUB reliability={('RELIABLE' if reliability==ReliabilityPolicy.RELIABLE else 'BEST_EFFORT')}\n"
+            "xarm_perturbation_injector started\n"
+            f"  topic      : {self.output_topic}\n"
+            f"  mode       : {self.mode}  |  enabled={self.enabled}\n"
+            f"  parameters : {mode_detail}\n"
+            f"  rate       : {1.0/self.publish_period_s:.0f} Hz  "
+            f"max_linear={self.max_lin} m/s\n"
+            f"  reliability: "
+            f"{'RELIABLE' if reliability == ReliabilityPolicy.RELIABLE else 'BEST_EFFORT'}"
         )
 
     def _dp(self):
