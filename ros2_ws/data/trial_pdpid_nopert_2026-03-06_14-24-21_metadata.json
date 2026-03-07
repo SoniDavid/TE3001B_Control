@@ -1,0 +1,123 @@
+{
+  "trial_id": "trial_pdpid_nopert_2026-03-06_14-24-21",
+  "controller": "PD",
+  "reference_space": "task-space (PCBTrajectory) \u2192 delta_twist_cmds",
+  "output_topic": "/servo_server/delta_twist_cmds",
+  "ik_solver": "N/A",
+  "control_rate_hz": 100,
+  "initial_config_rad": [
+    -1.14,
+    0.3,
+    1.7,
+    0.5,
+    0.5,
+    0.0
+  ],
+  "gains": {
+    "KP": [
+      2.5,
+      2.5,
+      2.5
+    ],
+    "KD": [
+      0.6,
+      0.6,
+      0.6
+    ],
+    "KI_PD": null,
+    "I_LIM": 0.05,
+    "MAX_SPEED_PD": 0.12,
+    "GAMMA": 2.5,
+    "K_ROBUST": 5.5,
+    "SIGN_EPS": 0.002
+  },
+  "perturbation": {
+    "enabled": false,
+    "mode": "gaussian",
+    "std_linear": 0.5,
+    "axis": "x",
+    "topic": "/servo_server/delta_twist_cmds"
+  },
+  "safety": {
+    "vel_limit_rad_s": 2.0,
+    "torque_limit_nm": 10.0,
+    "estop_topic": "/challenge_stop"
+  },
+  "waypoints": [
+    {
+      "id": 1,
+      "label": "pad1_approach",
+      "x": 0.26,
+      "y": 0.065,
+      "z": 0.4,
+      "layer": "high",
+      "dwell_s": 1.5
+    },
+    {
+      "id": 2,
+      "label": "pad1_place",
+      "x": 0.26,
+      "y": 0.065,
+      "z": 0.29,
+      "layer": "low",
+      "dwell_s": 2.0
+    },
+    {
+      "id": 3,
+      "label": "pad2_approach",
+      "x": 0.33,
+      "y": 0.065,
+      "z": 0.4,
+      "layer": "high",
+      "dwell_s": 1.5
+    },
+    {
+      "id": 4,
+      "label": "pad2_place",
+      "x": 0.33,
+      "y": 0.065,
+      "z": 0.29,
+      "layer": "low",
+      "dwell_s": 2.0
+    },
+    {
+      "id": 5,
+      "label": "pad3_approach",
+      "x": 0.33,
+      "y": -0.065,
+      "z": 0.4,
+      "layer": "high",
+      "dwell_s": 1.5
+    },
+    {
+      "id": 6,
+      "label": "pad3_place",
+      "x": 0.33,
+      "y": -0.065,
+      "z": 0.29,
+      "layer": "low",
+      "dwell_s": 2.0
+    },
+    {
+      "id": 7,
+      "label": "pad4_approach",
+      "x": 0.26,
+      "y": -0.065,
+      "z": 0.4,
+      "layer": "high",
+      "dwell_s": 1.5
+    },
+    {
+      "id": 8,
+      "label": "pad4_place",
+      "x": 0.26,
+      "y": -0.065,
+      "z": 0.29,
+      "layer": "low",
+      "dwell_s": 2.0
+    }
+  ],
+  "segment_sec": 3.0,
+  "total_traj_time_s": 41.0,
+  "success_threshold_m": 0.005
+}
