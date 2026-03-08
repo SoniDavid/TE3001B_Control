@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-ChallengeController — xArm Lite 6  (Challenge 4.1)
-CTC vs PD/PID Under Perturbations — PCB Component Placement Task
-
+ChallengeController - xArm Lite 6  (Challenge 4.1)
+CTC vs PD/PID Under Perturbations - PCB Component Placement Task
 Reference generation (both modes):
   On the first /joint_states message the actual EE position is computed via FK
   and used as the trajectory centre.  PCBTrajectory then generates Cartesian
@@ -63,8 +62,11 @@ MAX_SPEED_PD = 0.12
 LPF_FC_HZ    = 2.0     # first-order LPF cutoff (Hz) — matches perturbations package
 DEADBAND_M   = 0.002   # per-axis deadband (m) — zero command when within 2 mm
 
-KP_CTC = np.diag([20.0, 20.0, 20.0, 15.0, 10.0, 8.0])
-KD_CTC = np.diag([8.0,  8.0,  8.0,  6.0,  4.0,  3.0])
+# KP_CTC = np.diag([20.0, 20.0, 20.0, 15.0, 10.0, 8.0])
+# KD_CTC = np.diag([8.0,  8.0,  8.0,  6.0,  4.0,  3.0])
+
+KP_CTC = np.diag([20.0, 20.0, 20.0, 2.0, 1.0, 0.5])
+KD_CTC = np.diag([8.0,  8.0,  8.0, 0.8, 0.4, 0.2])
 
 GAMMA    = 2.5
 K_ROBUST = 5.5
@@ -166,6 +168,10 @@ class ChallengeController(Node):
 
         self._last_log_t  = None   # for periodic console diagnostics
 
+        # Waypoint reach tracking
+        self._wp_reached     = {}   # {wp_label: bool} — set once per trial when within threshold
+        self._wp_reach_thr_m = 0.005  # 5 mm success threshold
+
         # Trajectory is built in _control_cb from TF2 actual EE position.
         self._cart_traj: PCBTrajectory = None
         self._ik = WeightedIKSolver(Q_HOME_JOINTS, DT)
@@ -226,6 +232,7 @@ class ChallengeController(Node):
         if msg.data and not self._stopped:
             self._stopped = True
             self._publish_jog(np.zeros(6))
+            self._publish_twist(np.zeros(3))
             self._flush_csv()
             self.get_logger().warn('EMERGENCY STOP via /challenge_stop')
 
@@ -341,12 +348,10 @@ class ChallengeController(Node):
                 self._qd_des_filt[:]  = 0.0
                 self._qd_cmd_filt[:]  = 0.0
                 self._ik.reset(q)
+                self._wp_reached = {}   # reset reach flags for the new lap
                 t_rel = 0.0
             else:
-                if self._use_ctc:
-                    self._publish_jog(np.zeros(6))
-                else:
-                    self._publish_twist(np.zeros(3))
+                self._publish_twist(np.zeros(3))
                 self._flush_csv()
                 return
 
@@ -356,18 +361,48 @@ class ChallengeController(Node):
             # Use TF2 for Cartesian position (updates faster than /joint_states)
             # and the state predictor for joint-space (smooth between hw updates).
             p_tf2_ctc = self._read_pose_tf()
+            # --- Diagnostic: compare analytical FK against TF2 actual EE pose ---
+            if p_tf2_ctc is not None:
+                p_fk_q = forward_kinematics(q)[0]
+                fk_tf_err_mm = np.linalg.norm(p_tf2_ctc - p_fk_q) * 1000.0
+                self.get_logger().info(
+                    f"FK(q)-vs-TF error = {fk_tf_err_mm:.1f} mm  "
+                    f"TF={np.round(p_tf2_ctc,4)}  FK={np.round(p_fk_q,4)}",
+                    throttle_duration_sec=1.0,
+                )
+
+                p_fk_pred = forward_kinematics(self._q_pred)[0]
+                fk_pred_tf_err_mm = np.linalg.norm(p_tf2_ctc - p_fk_pred) * 1000.0
+                self.get_logger().info(
+                    f"FK(q_pred)-vs-TF error = {fk_pred_tf_err_mm:.1f} mm",
+                    throttle_duration_sec=1.0,
+                )
+                if fk_pred_tf_err_mm > 30.0:
+                    self.get_logger().warn(
+                        f'q_pred drifted {fk_pred_tf_err_mm:.1f} mm — resetting IK state',
+                        throttle_duration_sec=0.5)
+                    self._ik._qd_prev = np.zeros(6)
             q_des, qd_des, qdd_des = self._ik.step(
                 ctp.p, ctp.pd, ctp.pdd,
                 p_actual=p_tf2_ctc,
-                q_actual=self._q_pred)  # predictor → no frozen-state spikes in qdd_des
+                q_actual=q)  # always anchor Jacobian to actual hardware state
 
-            # --- IK sanity check ---
+            # --- IK sanity check (MUST run before wrist override) ---
+            # Checks FK(q_des_ik) vs p_des using the full IK solution (all 6 joints).
+            # After wrist pins are applied q_des[3:] changes, making FK irrelevant.
             p_ik_check = forward_kinematics(q_des)[0]
             ik_err_mm = np.linalg.norm(ctp.p - p_ik_check) * 1000
             if ik_err_mm > 5.0:
                 self.get_logger().warn(
                     f'IK diverged: {ik_err_mm:.1f}mm  '
-                    f'q_des={np.round(q_des,3)}  q_pred={np.round(self._q_pred,3)}')
+                    f'q_des={np.round(q_des,3)}  q_pred={np.round(self._q_pred,3)}',
+                    throttle_duration_sec=0.5)
+
+            # Pin wrist joints (4-6) to actual hardware config — task-space IK
+            # only needs to move joints 1-3 for 3-DOF position control.
+            q_des[3:] = q[3:]
+            qd_des[3:] = 0.0
+            qdd_des[3:] = 0.0
 
             # --- Filter cascade (CTC-specific) ---
             # 1. Hard clamp qdd_des: prevents M·v blow-up from spike accelerations
@@ -383,9 +418,10 @@ class ChallengeController(Node):
             self._qd_des_filt = (self._a_qd * self._qd_des_filt
                                  + (1.0 - self._a_qd) * qd_des)
 
-            # CTC uses predicted state for smooth M/C/G and smooth error terms
+            # CTC uses actual hardware state so that e = q_des - q is always small
+            # and correct (predictor drifts when servo ignores JointJog commands)
             qd_cmd, sat_flags = self._ctc(
-                self._q_pred, self._qd_pred,
+                q, qd,
                 q_des, self._qd_des_filt, self._qdd_des_filt)
 
             qd_sat = np.clip(qd_cmd, -VEL_LIMIT, VEL_LIMIT)
@@ -398,7 +434,29 @@ class ChallengeController(Node):
             qd_sat = np.clip(self._qd_cmd_filt, -VEL_LIMIT, VEL_LIMIT)
 
             self._last_qd_cmd = qd_sat.copy()  # store for next-tick prediction
-            self._publish_jog(qd_sat)
+            # Convert joint velocity → Cartesian velocity so CTC shares the same
+            # servo channel (/servo_server/delta_twist_cmds) as the perturbation
+            # injector.  MoveIt Servo alternates command-type when it receives both
+            # JointJog and TwistStamped simultaneously, silently dropping ~half of
+            # the CTC joint commands and causing divergence.  Using one channel
+            # avoids that conflict while keeping all CTC dynamics math unchanged.
+            J_q = position_jacobian(q)
+            pd_cmd = J_q @ qd_sat
+            # Wrist singularity: scale Cartesian command when joint5 (index 4) is
+            # near 0.  The hard_stop threshold in the Servo config is raised to
+            # 50000 so Servo no longer emergency-stops, but we also limit the
+            # commanded velocity here to reduce IK amplification through the
+            # near-singular 6×6 Jacobian.  At |q5| ≥ 0.20 rad the scale is 1.0
+            # (full speed); at |q5| = 0 it floors at 0.05 (5 % speed, never zero
+            # so Servo stays active).
+            wrist_scale = float(np.clip(abs(q[4]) / 0.20, 0.05, 1.0))
+            if wrist_scale < 1.0:
+                pd_cmd = pd_cmd * wrist_scale
+                self.get_logger().warn(
+                    f'Wrist near singular: q5={np.degrees(q[4]):.1f}° '
+                    f'→ vel scale={wrist_scale:.2f}',
+                    throttle_duration_sec=1.0)
+            self._publish_twist(pd_cmd)
             p_act = p_tf2_ctc if p_tf2_ctc is not None else forward_kinematics(q)[0]
             p_des      = ctp.p
             cmd_log    = qd_sat.tolist()
@@ -425,6 +483,22 @@ class ChallengeController(Node):
             qd_filt_log  = [0.0] * 6
 
         wp_idx, label, phase = ctp.wp_idx, ctp.label, ctp.phase
+
+        # ── Waypoint reach detection ─────────────────────────────────────────
+        # During dwell phases the desired position is held constant — this is
+        # where we can meaningfully judge whether the EE reached the target.
+        if phase == 'dwell' and label not in self._wp_reached:
+            err_wp = np.linalg.norm(p_act - p_des)
+            if err_wp <= self._wp_reach_thr_m:
+                self._wp_reached[label] = True
+                self.get_logger().info(
+                    f'WAYPOINT REACHED  {label}  |err|={err_wp*1000:.1f} mm  '
+                    f't={t_rel:.2f}s')
+            else:
+                self.get_logger().warn(
+                    f'Waypoint NOT yet reached  {label}  '
+                    f'|err|={err_wp*1000:.1f} mm (thr={self._wp_reach_thr_m*1000:.0f} mm)',
+                    throttle_duration_sec=1.0)
 
         abs_t = self.get_clock().now().nanoseconds * 1e-9
         pert_changed = int(self._pert_en != self._pert_prev)

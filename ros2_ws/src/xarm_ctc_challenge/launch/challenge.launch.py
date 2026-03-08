@@ -14,6 +14,8 @@ def generate_launch_description():
                               description='Directory for CSV/metadata output'),
         DeclareLaunchArgument('loop_trajectory',       default_value='false',
                               description='Loop trajectory after completion'),
+        DeclareLaunchArgument('joint_states_topic',    default_value='/joint_states',
+                              description='Joint states topic (/joint_states ~10Hz or /ufactory/joint_states ~150Hz)'),
 
         Node(
             package='xarm_ctc_challenge',
@@ -25,6 +27,7 @@ def generate_launch_description():
                 'perturbation_enabled': LaunchConfiguration('perturbation_enabled'),
                 'csv_dir':              LaunchConfiguration('csv_dir'),
                 'loop_trajectory':      LaunchConfiguration('loop_trajectory'),
+                'joint_states_topic':   LaunchConfiguration('joint_states_topic'),
             }],
         ),
     ])

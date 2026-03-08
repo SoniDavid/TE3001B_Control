@@ -47,11 +47,13 @@ K_NULL       = 5.0     # null-space posture gain — raised from 1.5; prevents
 MAX_TASK_VEL = 0.25    # m/s — raised from 0.15; allows faster error correction
                        # while keeping joint velocity commands within ±2 rad/s
 IK_VEL_LIMIT = 2.0     # rad/s — per-joint clip on q_hat integration
+MAX_QDD      = 50.0    # rad/s² — hard clamp on IK-level qdd_des finite difference
 
-# xArm Lite 6 joint limits [rad] (conservative symmetric approximation).
-# Joint4 physical limit is ±175° = ±3.054 rad — servo halts at this value.
-JOINT_LIMIT_UPPER = np.array([6.283, 2.094, 4.712, 3.054, 2.967, 6.283])
-JOINT_LIMIT_LOWER = -JOINT_LIMIT_UPPER
+# xArm Lite 6 joint limits [rad] — from official URDF (non-limited mode).
+# Joint3 is asymmetric: lower=-0.061087 rad (~-3.5°), upper=5.235988 rad (~300°).
+# Joint5 physical limit is ±2.1642 rad (~124°); joint2 is ±2.61799 rad (~150°).
+JOINT_LIMIT_UPPER = np.array([6.283, 2.618, 5.236, 3.054, 2.164, 6.283])
+JOINT_LIMIT_LOWER = np.array([-6.283, -2.618, -0.061, -3.054, -2.164, -6.283])
 LIMIT_MARGIN = 0.35    # rad (~20°) — avoidance kicks in this far from limit
 K_LIMIT      = 20.0    # rad/s per rad of penetration into the margin
 
@@ -81,6 +83,7 @@ class WeightedIKSolver:
         self.k_null  = k_null
         self.max_tv  = MAX_TASK_VEL
         self.ik_vel_lim = IK_VEL_LIMIT
+        self.max_qdd    = MAX_QDD
 
         # Task-space weight matrix (3×3) — z-axis priority
         self._W  = np.diag([1.0, 1.0, wz])
@@ -159,12 +162,14 @@ class WeightedIKSolver:
         task_vel = pd_des + err_term                           # (3,)
         qd_des   = J_sharp @ task_vel + q_null_dot            # (6,)
 
-        # Desired acceleration via finite difference
-        qdd_des = (qd_des - self._qd_prev) / self.dt
+        # Desired acceleration via finite difference — computed on CLIPPED velocity
+        # so that FD does not spike when qd_des jumps after a perturbation.
+        qd_des_clipped = np.clip(qd_des, -self.ik_vel_lim, self.ik_vel_lim)
+        qdd_des = (qd_des_clipped - self._qd_prev) / self.dt
+        qdd_des = np.clip(qdd_des, -self.max_qdd, self.max_qdd)
 
         # One-step-ahead reference, anchored to actual → q_hat never diverges
-        qd_int     = np.clip(qd_des, -self.ik_vel_lim, self.ik_vel_lim)
-        self.q_hat = q + qd_int * self.dt
-        self._qd_prev = qd_des.copy()
+        self.q_hat = q + qd_des_clipped * self.dt
+        self._qd_prev = qd_des_clipped.copy()   # store CLIPPED to avoid next-tick spike
 
-        return self.q_hat.copy(), qd_des, qdd_des
+        return self.q_hat.copy(), qd_des_clipped, qdd_des
