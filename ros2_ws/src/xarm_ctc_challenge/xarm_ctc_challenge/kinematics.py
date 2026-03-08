@@ -27,31 +27,32 @@ JOINT_NAMES = ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6']
 # Precomputed constant origin transforms  (computed once at import)
 # ---------------------------------------------------------------------------
 
+
 def _rpy_matrix(roll: float, pitch: float, yaw: float) -> np.ndarray:
     """URDF RPY → 3×3 rotation matrix: R = Rz(yaw) @ Ry(pitch) @ Rx(roll)."""
-    cr, sr = np.cos(roll),  np.sin(roll)
+    cr, sr = np.cos(roll), np.sin(roll)
     cp, sp = np.cos(pitch), np.sin(pitch)
-    cy, sy = np.cos(yaw),   np.sin(yaw)
-    Rx = np.array([[1, 0,   0  ], [0,  cr, -sr], [0,  sr,  cr]])
-    Ry = np.array([[cp, 0, sp  ], [0,   1,   0], [-sp, 0,  cp]])
-    Rz = np.array([[cy, -sy, 0 ], [sy,  cy,  0], [0,   0,   1]])
+    cy, sy = np.cos(yaw), np.sin(yaw)
+    Rx = np.array([[1, 0, 0], [0, cr, -sr], [0, sr, cr]])
+    Ry = np.array([[cp, 0, sp], [0, 1, 0], [-sp, 0, cp]])
+    Rz = np.array([[cy, -sy, 0], [sy, cy, 0], [0, 0, 1]])
     return Rz @ Ry @ Rx
 
 
 def _make_origin(xyz, rpy) -> np.ndarray:
     T = np.eye(4)
     T[:3, :3] = _rpy_matrix(*rpy)
-    T[:3,  3] = xyz
+    T[:3, 3] = xyz
     return T
 
 
 _JOINT_PARAMS = [
-    ([0,       0,        0.2435], [0,          0,       0      ]),  # joint1
-    ([0,       0,        0     ], [np.pi/2,   -np.pi/2, np.pi  ]),  # joint2
-    ([0.2002,  0,        0     ], [-np.pi,     0,       np.pi/2]),  # joint3
-    ([0.087,  -0.22761,  0     ], [np.pi/2,    0,       0      ]),  # joint4
-    ([0,       0,        0     ], [np.pi/2,    0,       0      ]),  # joint5
-    ([0,       0.0625,   0     ], [-np.pi/2,   0,       0      ]),  # joint6
+    ([0, 0, 0.2435], [0, 0, 0]),  # joint1
+    ([0, 0, 0], [np.pi / 2, -np.pi / 2, np.pi]),  # joint2
+    ([0.2002, 0, 0], [-np.pi, 0, np.pi / 2]),  # joint3
+    ([0.087, -0.22761, 0], [np.pi / 2, 0, 0]),  # joint4
+    ([0, 0, 0], [np.pi / 2, 0, 0]),  # joint5
+    ([0, 0.0625, 0], [-np.pi / 2, 0, 0]),  # joint6
 ]
 
 # Fixed origin transforms – computed once at import time
@@ -60,6 +61,7 @@ T_ORIGINS: list = [_make_origin(xyz, rpy) for xyz, rpy in _JOINT_PARAMS]
 # ---------------------------------------------------------------------------
 # Core: compute all frames in one pass
 # ---------------------------------------------------------------------------
+
 
 def _compute_frames(q: np.ndarray):
     """
@@ -75,7 +77,7 @@ def _compute_frames(q: np.ndarray):
         T_pre_list[i] = T_0^{joint_i_axis}  — transform BEFORE joint i rotation.
         z-axis of T_pre_list[i] is the rotation axis of joint i in the base frame.
     """
-    T_list     = [np.eye(4)]
+    T_list = [np.eye(4)]
     T_pre_list = []
     T = np.eye(4)
     for i in range(6):
@@ -87,7 +89,7 @@ def _compute_frames(q: np.ndarray):
         col0 = T_pre[:, 0].copy()
         col1 = T_pre[:, 1].copy()
         T = T_pre.copy()
-        T[:3, 0] =  cq * col0[:3] + sq * col1[:3]
+        T[:3, 0] = cq * col0[:3] + sq * col1[:3]
         T[:3, 1] = -sq * col0[:3] + cq * col1[:3]
         T_list.append(T)
     return T_list, T_pre_list

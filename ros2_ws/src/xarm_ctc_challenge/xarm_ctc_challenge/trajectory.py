@@ -40,9 +40,9 @@ from typing import List, Optional, Tuple
 # Relative offset constants  [m]
 # ---------------------------------------------------------------------------
 
-DX  = 0.040   # forward / back half-range
-DY  = 0.045   # left / right half-range
-DZ  = 0.090   # vertical drop from HIGH to LOW  (separation = DZ ✓ ≥ 0.08 m)
+DX = 0.040   # forward / back half-range
+DY = 0.045   # left / right half-range
+DZ = 0.090   # vertical drop from HIGH to LOW  (separation = DZ ✓ ≥ 0.08 m)
 
 SEGMENT_SEC = 3.0   # transition time between waypoints [s]
 
@@ -69,13 +69,13 @@ def _build_waypoints(centre: np.ndarray) -> List[Tuple]:
     """
     cx, cy, cz = centre
     z_high = cz            # transit / approach height  = starting z
-    z_low  = cz - DZ      # placement height           = starting z − DZ
+    z_low = cz - DZ      # placement height           = starting z − DZ
 
     wps = []
     for (dx, dy, label) in _SITES:
         wps.append((cx + dx, cy + dy, z_high, 1.5, f"{label}_high"))   # approach
-        wps.append((cx + dx, cy + dy, z_low,  2.0, f"{label}_low"))    # place
-        wps.append((cx + dx, cy + dy, z_high, 0.0, f"{label}_depart")) # depart
+        wps.append((cx + dx, cy + dy, z_low, 2.0, f"{label}_low"))    # place
+        wps.append((cx + dx, cy + dy, z_high, 0.0, f"{label}_depart"))  # depart
 
     return wps
 
@@ -86,19 +86,19 @@ def _build_waypoints(centre: np.ndarray) -> List[Tuple]:
 
 @dataclass
 class TrajPoint:
-    p:      np.ndarray   # (3,) desired position [m]
-    pd:     np.ndarray   # (3,) desired velocity [m/s]
-    pdd:    np.ndarray   # (3,) desired acceleration [m/s²]
+    p: np.ndarray   # (3,) desired position [m]
+    pd: np.ndarray   # (3,) desired velocity [m/s]
+    pdd: np.ndarray   # (3,) desired acceleration [m/s²]
     wp_idx: int
-    label:  str
-    phase:  str          # "segment" | "dwell"
+    label: str
+    phase: str          # "segment" | "dwell"
 
 
 def _quintic(tau: float) -> Tuple[float, float, float]:
     t2, t3, t4, t5 = tau**2, tau**3, tau**4, tau**5
-    h   = 10*t3 - 15*t4 + 6*t5
-    hd  = 30*t2 - 60*t3 + 30*t4
-    hdd = 60*tau - 180*t2 + 120*t3
+    h = 10 * t3 - 15 * t4 + 6 * t5
+    hd = 30 * t2 - 60 * t3 + 30 * t4
+    hdd = 60 * tau - 180 * t2 + 120 * t3
     return h, hd, hdd
 
 
@@ -116,9 +116,9 @@ class PCBTrajectory:
         self._waypoints = _build_waypoints(centre)   # absolute (x,y,z,dwell,label)
 
         # Full point chain: centre → WP1 … WPN → centre
-        self._pts    = [centre] + [np.array(wp[:3]) for wp in self._waypoints] + [centre]
-        self._dwells = [0.0]    + [wp[3]            for wp in self._waypoints] + [0.0]
-        self._labels = ["home"] + [wp[4]            for wp in self._waypoints] + ["home"]
+        self._pts = [centre] + [np.array(wp[:3]) for wp in self._waypoints] + [centre]
+        self._dwells = [0.0] + [wp[3] for wp in self._waypoints] + [0.0]
+        self._labels = ["home"] + [wp[4] for wp in self._waypoints] + ["home"]
 
         T = SEGMENT_SEC
         events = []
@@ -130,7 +130,7 @@ class PCBTrajectory:
             if d > 0.0:
                 events.append((t, t + d, "dwell", i + 1))
                 t += d
-        self._events     = events
+        self._events = events
         self._total_time = t
 
     @property
@@ -152,13 +152,13 @@ class PCBTrajectory:
         for (t0, t1, etype, idx) in self._events:
             if t <= t1:
                 if etype == "segment":
-                    pa  = self._pts[idx]
-                    pb  = self._pts[idx + 1]
+                    pa = self._pts[idx]
+                    pb = self._pts[idx + 1]
                     tau = float(np.clip((t - t0) / T, 0.0, 1.0))
                     h, hd, hdd = _quintic(tau)
-                    p   = pa + h        * (pb - pa)
-                    pd  = (hd  / T)     * (pb - pa)
-                    pdd = (hdd / T**2)  * (pb - pa)
+                    p = pa + h * (pb - pa)
+                    pd = (hd / T) * (pb - pa)
+                    pdd = (hdd / T**2) * (pb - pa)
                     return TrajPoint(p, pd, pdd, idx, self._labels[idx + 1], "segment")
                 else:
                     p = self._pts[idx].copy()

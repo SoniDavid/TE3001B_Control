@@ -49,26 +49,26 @@ from .trajectory import PCBTrajectory
 # Constants
 # ---------------------------------------------------------------------------
 
-CONTROL_HZ   = 100
-DT           = 1.0 / CONTROL_HZ
-VEL_LIMIT    = 2.0
+CONTROL_HZ = 100
+DT = 1.0 / CONTROL_HZ
+VEL_LIMIT = 2.0
 TORQUE_LIMIT = 10.0
 
-KP_PD  = np.array([2.5, 2.5, 2.5])
-KD_PD  = np.array([0.6, 0.6, 0.6])
-KI_PD  = np.array([0.1, 0.1, 0.1])
-I_LIM  = 0.05
+KP_PD = np.array([2.5, 2.5, 2.5])
+KD_PD = np.array([0.6, 0.6, 0.6])
+KI_PD = np.array([0.1, 0.1, 0.1])
+I_LIM = 0.05
 MAX_SPEED_PD = 0.12
-LPF_FC_HZ    = 2.0     # first-order LPF cutoff (Hz) — matches perturbations package
-DEADBAND_M   = 0.002   # per-axis deadband (m) — zero command when within 2 mm
+LPF_FC_HZ = 2.0     # first-order LPF cutoff (Hz) — matches perturbations package
+DEADBAND_M = 0.002   # per-axis deadband (m) — zero command when within 2 mm
 
 # KP_CTC = np.diag([20.0, 20.0, 20.0, 15.0, 10.0, 8.0])
 # KD_CTC = np.diag([8.0,  8.0,  8.0,  6.0,  4.0,  3.0])
 
 KP_CTC = np.diag([20.0, 20.0, 20.0, 2.0, 1.0, 0.5])
-KD_CTC = np.diag([8.0,  8.0,  8.0, 0.8, 0.4, 0.2])
+KD_CTC = np.diag([8.0, 8.0, 8.0, 0.8, 0.4, 0.2])
 
-GAMMA    = 2.5
+GAMMA = 2.5
 K_ROBUST = 5.5
 SIGN_EPS = 2e-3
 
@@ -81,10 +81,10 @@ SIGN_EPS = 2e-3
 #   2. LPF on qdd_des  (fc=5 Hz)   — removes state-update spikes
 #   3. LPF on qd_des   (fc=10 Hz)  — smooths IK velocity chatter → quieter ė term
 #   4. LPF on qd_cmd   (fc=20 Hz)  — smooths servo input → less abrupt joint moves
-MAX_QDD_DES  = 10.0   # rad/s²  — hard clamp on desired joint acceleration
-FILT_FC_QDD  = 5.0    # Hz      — LPF cutoff for qdd_des
-FILT_FC_QD   = 10.0   # Hz      — LPF cutoff for qd_des
-FILT_FC_CMD  = 20.0   # Hz      — LPF cutoff for qd_cmd output
+MAX_QDD_DES = 10.0   # rad/s²  — hard clamp on desired joint acceleration
+FILT_FC_QDD = 5.0    # Hz      — LPF cutoff for qdd_des
+FILT_FC_QD = 10.0   # Hz      — LPF cutoff for qd_des
+FILT_FC_CMD = 20.0   # Hz      — LPF cutoff for qd_cmd output
 
 Q_HOME_JOINTS = np.array([-1.14, 0.30, 1.70, 0.50, 0.5, 0.0])
 
@@ -99,42 +99,46 @@ class ChallengeController(Node):
         super().__init__('challenge_controller')
 
         ctrl_type = str(self.declare_parameter('controller_type', '').value).upper()
-        self._use_ctc  = (ctrl_type == 'CTC') or bool(self.declare_parameter('use_ctc', False).value)
-        self._use_pid  = (ctrl_type == 'PID') or bool(self.declare_parameter('use_pid', False).value)
+        self._use_ctc = (ctrl_type == 'CTC') or bool(self.declare_parameter('use_ctc', False).value)
+        self._use_pid = (ctrl_type == 'PID') or bool(self.declare_parameter('use_pid', False).value)
         self._save_csv = bool(self.declare_parameter('save_csv', True).value)
-        self._pert_en  = bool(self.declare_parameter('perturbation_enabled', False).value)
-        self._loop     = bool(self.declare_parameter('loop_trajectory', False).value)
-        self._csv_dir  = str(self.declare_parameter('csv_dir', 'data').value)
+        self._pert_en = bool(self.declare_parameter('perturbation_enabled', False).value)
+        self._loop = bool(self.declare_parameter('loop_trajectory', False).value)
+        self._csv_dir = str(self.declare_parameter('csv_dir', 'data').value)
 
         self._pert_mode = str(self.declare_parameter('pert_mode', 'gaussian').value)
-        self._pert_std  = float(self.declare_parameter('pert_std_linear', 0.5).value)
+        self._pert_std = float(self.declare_parameter('pert_std_linear', 0.5).value)
         self._pert_axis = str(self.declare_parameter('pert_gauss_axis', 'x').value)
         # joint_states_topic: override to '/ufactory/joint_states' (ros2_control, ~150 Hz)
         # instead of '/joint_states' (joint_state_publisher aggregator, ~10 Hz)
-        self._js_topic  = str(self.declare_parameter('joint_states_topic', '/joint_states').value)
+        self._js_topic = str(self.declare_parameter('joint_states_topic', '/joint_states').value)
 
         kp = list(self.declare_parameter('kp', []).value)
         kd = list(self.declare_parameter('kd', []).value)
         if self._use_ctc:
-            if len(kp) == 6: np.fill_diagonal(KP_CTC, kp)
-            if len(kd) == 6: np.fill_diagonal(KD_CTC, kd)
+            if len(kp) == 6:
+                np.fill_diagonal(KP_CTC, kp)
+            if len(kd) == 6:
+                np.fill_diagonal(KD_CTC, kd)
         else:
-            if len(kp) == 3: KP_PD[:] = kp
-            if len(kd) == 3: KD_PD[:] = kd
+            if len(kp) == 3:
+                KP_PD[:] = kp
+            if len(kd) == 3:
+                KD_PD[:] = kd
 
         self.add_on_set_parameters_callback(self._on_param_change)
 
         self._state_lock = threading.Lock()
-        self._q   = Q_HOME_JOINTS.copy()
-        self._qd  = np.zeros(6)
-        self._ready      = False
-        self._stopped    = False
+        self._q = Q_HOME_JOINTS.copy()
+        self._qd = np.zeros(6)
+        self._ready = False
+        self._stopped = False
         self._traj_ready = False
-        self._t_start    = None
+        self._t_start = None
 
-        self._e_int      = np.zeros(3)
+        self._e_int = np.zeros(3)
         self._qd_cmd_ctc = np.zeros(6)
-        self._prev_e_pd  = np.zeros(3)
+        self._prev_e_pd = np.zeros(3)
         self._prev_vel_pd = np.zeros(3)
 
         # --- State predictor (CTC) ---
@@ -145,31 +149,31 @@ class ChallengeController(Node):
         # the last commanded velocity every tick, reset to the real measurement
         # whenever a fresh /joint_states message arrives.
         self._state_updated = False            # set True by every new joint_state msg
-        self._q_pred  = Q_HOME_JOINTS.copy()   # predicted joint position
+        self._q_pred = Q_HOME_JOINTS.copy()   # predicted joint position
         self._qd_pred = np.zeros(6)            # predicted joint velocity
         self._last_qd_cmd = np.zeros(6)        # last CTC velocity command (for prediction)
 
         # --- CTC signal filters (tunable via ROS2 parameters) ---
-        self._max_qdd  = float(self.declare_parameter('max_qdd_des',   MAX_QDD_DES).value)
-        self._fc_qdd   = float(self.declare_parameter('filter_fc_qdd', FILT_FC_QDD).value)
-        self._fc_qd    = float(self.declare_parameter('filter_fc_qd',  FILT_FC_QD).value)
-        self._fc_cmd   = float(self.declare_parameter('filter_fc_cmd', FILT_FC_CMD).value)
+        self._max_qdd = float(self.declare_parameter('max_qdd_des', MAX_QDD_DES).value)
+        self._fc_qdd = float(self.declare_parameter('filter_fc_qdd', FILT_FC_QDD).value)
+        self._fc_qd = float(self.declare_parameter('filter_fc_qd', FILT_FC_QD).value)
+        self._fc_cmd = float(self.declare_parameter('filter_fc_cmd', FILT_FC_CMD).value)
         # Precompute first-order IIR coefficients  α = exp(-2π·fc·dt)
         self._a_qdd = float(np.exp(-2 * np.pi * self._fc_qdd * DT))
-        self._a_qd  = float(np.exp(-2 * np.pi * self._fc_qd  * DT))
-        self._a_cmd = float(np.exp(-2 * np.pi * self._fc_cmd  * DT))
+        self._a_qd = float(np.exp(-2 * np.pi * self._fc_qd * DT))
+        self._a_cmd = float(np.exp(-2 * np.pi * self._fc_cmd * DT))
         # Filter states
         self._qdd_des_filt = np.zeros(6)
-        self._qd_des_filt  = np.zeros(6)
-        self._qd_cmd_filt  = np.zeros(6)
+        self._qd_des_filt = np.zeros(6)
+        self._qd_cmd_filt = np.zeros(6)
 
-        self._pert_prev    = self._pert_en
+        self._pert_prev = self._pert_en
         self._pert_start_t = None
 
-        self._last_log_t  = None   # for periodic console diagnostics
+        self._last_log_t = None   # for periodic console diagnostics
 
         # Waypoint reach tracking
-        self._wp_reached     = {}   # {wp_label: bool} — set once per trial when within threshold
+        self._wp_reached = {}   # {wp_label: bool} — set once per trial when within threshold
         self._wp_reach_thr_m = 0.005  # 5 mm success threshold
 
         # Trajectory is built in _control_cb from TF2 actual EE position.
@@ -187,7 +191,7 @@ class ChallengeController(Node):
             durability=DurabilityPolicy.VOLATILE,
         )
 
-        self._tf_buffer   = Buffer()
+        self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
 
         self._jog_pub = self.create_publisher(
@@ -202,8 +206,8 @@ class ChallengeController(Node):
         self._stop_sub = self.create_subscription(
             Bool, '/challenge_stop', self._estop_cb, 10)
 
-        self._csv_file    = None
-        self._csv_writer  = None
+        self._csv_file = None
+        self._csv_writer = None
         self._csv_row_buf = []
         if self._save_csv:
             self._init_csv()
@@ -240,22 +244,22 @@ class ChallengeController(Node):
 
     def _joint_state_cb(self, msg: JointState):
         name_to_idx = {n: i for i, n in enumerate(msg.name)}
-        q  = np.zeros(6)
+        q = np.zeros(6)
         qd = np.zeros(6)
         for j, jname in enumerate(JOINT_NAMES):
             if jname in name_to_idx:
                 idx = name_to_idx[jname]
-                q[j]  = msg.position[idx]
+                q[j] = msg.position[idx]
                 qd[j] = msg.velocity[idx] if msg.velocity else 0.0
 
         with self._state_lock:
-            self._q  = q
+            self._q = q
             self._qd = qd
             self._state_updated = True
             if not self._ready:
                 self._ready = True
                 self._qd_cmd_ctc = qd.copy()
-                self._q_pred  = q.copy()
+                self._q_pred = q.copy()
                 self._qd_pred = qd.copy()
                 self._ik.reset(q)
                 self.get_logger().info(
@@ -292,13 +296,13 @@ class ChallengeController(Node):
                 q_init = self._q.copy()
             self._cart_traj = PCBTrajectory(centre=p_centre)
             self._ik.reset(q_init)
-            self._q_pred  = q_init.copy()
+            self._q_pred = q_init.copy()
             self._qd_pred = np.zeros(6)
             self._last_qd_cmd[:] = 0.0
             self._qdd_des_filt[:] = 0.0
-            self._qd_des_filt[:]  = 0.0
-            self._qd_cmd_filt[:]  = 0.0
-            self._t_start    = self.get_clock().now()
+            self._qd_des_filt[:] = 0.0
+            self._qd_cmd_filt[:] = 0.0
+            self._t_start = self.get_clock().now()
             self._traj_ready = True
             self._last_log_t = self.get_clock().now()
             mode_str = "CTC" if self._use_ctc else ("PID" if self._use_pid else "PD")
@@ -315,7 +319,7 @@ class ChallengeController(Node):
             return
 
         with self._state_lock:
-            q  = self._q.copy()
+            q = self._q.copy()
             qd = self._qd.copy()
             state_fresh = self._state_updated
             self._state_updated = False
@@ -326,10 +330,10 @@ class ChallengeController(Node):
         # that CTC dynamics and IK always see a smooth, non-frozen q/qd.
         if self._use_ctc:
             if state_fresh:
-                self._q_pred  = q.copy()
+                self._q_pred = q.copy()
                 self._qd_pred = qd.copy()
             else:
-                self._q_pred  = self._q_pred + self._last_qd_cmd * DT
+                self._q_pred = self._q_pred + self._last_qd_cmd * DT
                 self._qd_pred = self._last_qd_cmd.copy()
 
         t_rel = (self.get_clock().now() - self._t_start).nanoseconds * 1e-9
@@ -337,16 +341,16 @@ class ChallengeController(Node):
         if t_rel > self._cart_traj.total_time:
             if self._loop:
                 self._t_start = self.get_clock().now()
-                self._e_int[:]       = 0.0
-                self._qd_cmd_ctc[:]  = 0.0
-                self._prev_e_pd[:]   = 0.0
+                self._e_int[:] = 0.0
+                self._qd_cmd_ctc[:] = 0.0
+                self._prev_e_pd[:] = 0.0
                 self._prev_vel_pd[:] = 0.0
                 self._last_qd_cmd[:] = 0.0
-                self._q_pred  = q.copy()
+                self._q_pred = q.copy()
                 self._qd_pred = np.zeros(6)
                 self._qdd_des_filt[:] = 0.0
-                self._qd_des_filt[:]  = 0.0
-                self._qd_cmd_filt[:]  = 0.0
+                self._qd_des_filt[:] = 0.0
+                self._qd_cmd_filt[:] = 0.0
                 self._ik.reset(q)
                 self._wp_reached = {}   # reset reach flags for the new lap
                 t_rel = 0.0
@@ -458,29 +462,29 @@ class ChallengeController(Node):
                     throttle_duration_sec=1.0)
             self._publish_twist(pd_cmd)
             p_act = p_tf2_ctc if p_tf2_ctc is not None else forward_kinematics(q)[0]
-            p_des      = ctp.p
-            cmd_log    = qd_sat.tolist()
-            sat_log    = sat_flags.astype(int).tolist()
+            p_des = ctp.p
+            cmd_log = qd_sat.tolist()
+            sat_log = sat_flags.astype(int).tolist()
             # Extended log fields (CTC-specific)
-            q_pred_log    = self._q_pred.tolist()
-            qdd_raw_log   = qdd_raw.tolist()
-            qdd_filt_log  = self._qdd_des_filt.tolist()
-            qd_filt_log   = self._qd_des_filt.tolist()
+            q_pred_log = self._q_pred.tolist()
+            qdd_raw_log = qdd_raw.tolist()
+            qdd_filt_log = self._qdd_des_filt.tolist()
+            qd_filt_log = self._qd_des_filt.tolist()
         else:
             # Use TF2 for actual EE position (same as perturbations package)
             p_act_tf = self._read_pose_tf()
             p_act = p_act_tf if p_act_tf is not None else forward_kinematics(q)[0]
             v_cmd, sat_flags = self._pd_pid_cart(p_act, ctp, q)
             self._publish_twist(v_cmd)
-            p_des     = ctp.p
+            p_des = ctp.p
             q_des, qd_des, qdd_des = q.copy(), np.zeros(6), np.zeros(6)
-            cmd_log   = list(v_cmd) + [0.0, 0.0, 0.0]
-            sat_log   = list(sat_flags.astype(int)) + [0, 0, 0]
+            cmd_log = list(v_cmd) + [0.0, 0.0, 0.0]
+            sat_log = list(sat_flags.astype(int)) + [0, 0, 0]
             # Extended log fields (PD: no predictor/filters — use neutral values)
-            q_pred_log   = q.tolist()
-            qdd_raw_log  = [0.0] * 6
+            q_pred_log = q.tolist()
+            qdd_raw_log = [0.0] * 6
             qdd_filt_log = [0.0] * 6
-            qd_filt_log  = [0.0] * 6
+            qd_filt_log = [0.0] * 6
 
         wp_idx, label, phase = ctp.wp_idx, ctp.label, ctp.phase
 
@@ -531,11 +535,11 @@ class ChallengeController(Node):
         now_t = self.get_clock().now()
         if self._last_log_t is None or \
                 (now_t - self._last_log_t).nanoseconds > 2e9:
-            err   = p_des - p_act
+            err = p_des - p_act
             # Jacobian condition number — high value means servo singularity scaling
             J_diag = position_jacobian(q)
-            sigma  = np.linalg.svd(J_diag, compute_uv=False)
-            cond   = sigma[0] / max(sigma[-1], 1e-6)
+            sigma = np.linalg.svd(J_diag, compute_uv=False)
+            cond = sigma[0] / max(sigma[-1], 1e-6)
             ctrl_extra = (
                 f"  σ_min={sigma[-1]:.4f}  cond={cond:.1f}"
                 if self._use_ctc else ""
@@ -551,8 +555,9 @@ class ChallengeController(Node):
             if self._use_ctc:
                 self.get_logger().info(
                     f"  q=[{','.join(f'{np.degrees(v):.1f}' for v in q)}]°  "
-                    f"qd_cmd=[{','.join(f'{np.degrees(v):.1f}' for v in (qd_sat if self._use_ctc else np.zeros(6)))}]°/s"
-                )
+                    f"qd_cmd=["
+                    f"{','.join(f'{np.degrees(v):.1f}' for v in (qd_sat if self._use_ctc else np.zeros(6)))}"  # noqa: E501
+                    f"]°/s")
             self._last_log_t = now_t
 
     # ── PD / PID  (identical approach to xarm_perturbations Lab 4.2) ─────────
@@ -576,7 +581,7 @@ class ChallengeController(Node):
           - Jacobian minimum-singular-value scaling to survive near-singularity
         """
         import math
-        e      = ctp.p - p_act
+        e = ctp.p - p_act
         d_error = (e - self._prev_e_pd) / DT
 
         active_mask = np.abs(e) > DEADBAND_M
@@ -625,7 +630,7 @@ class ChallengeController(Node):
     # ── CTC ───────────────────────────────────────────────────────────────────
 
     def _ctc(self, q, qd, q_des, qd_des, qdd_des):
-        e    = q_des - q
+        e = q_des - q
         edot = qd_des - qd
 
         # --- CTC acceleration reference ---
@@ -635,8 +640,8 @@ class ChallengeController(Node):
 
         # --- Dynamics feedforward (model-based cancellation) ---
         M, Cqd, G, F = get_dynamics(q, qd)
-        tau  = M @ v + Cqd + G + F
-        tau  = np.clip(tau, -TORQUE_LIMIT, TORQUE_LIMIT)
+        tau = M @ v + Cqd + G + F
+        tau = np.clip(tau, -TORQUE_LIMIT, TORQUE_LIMIT)
         sat_flags = np.abs(tau) >= TORQUE_LIMIT
 
         # --- Velocity command for velocity-controlled interface ---
@@ -645,28 +650,28 @@ class ChallengeController(Node):
         # If tau is unsaturated: qdd_cmd = M^{-1}(M@v + Cqd + G + F - Cqd - G - F) = v
         # If saturated: qdd_cmd is reduced accordingly, limiting aggressive moves.
         qdd_cmd = np.linalg.solve(M, tau - Cqd - G - F)
-        qd_cmd  = qd_des + qdd_cmd * DT
-        qd_cmd  = np.clip(qd_cmd, -VEL_LIMIT, VEL_LIMIT)
+        qd_cmd = qd_des + qdd_cmd * DT
+        qd_cmd = np.clip(qd_cmd, -VEL_LIMIT, VEL_LIMIT)
         return qd_cmd, sat_flags
 
     # ── Publishers ────────────────────────────────────────────────────────────
 
     def _publish_jog(self, qd_cmd: np.ndarray):
         msg = JointJog()
-        msg.header.stamp    = self.get_clock().now().to_msg()
+        msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = 'link_base'
-        msg.joint_names     = JOINT_NAMES
-        msg.velocities      = qd_cmd.tolist()
-        msg.duration        = DT
+        msg.joint_names = JOINT_NAMES
+        msg.velocities = qd_cmd.tolist()
+        msg.duration = DT
         self._jog_pub.publish(msg)
 
     def _publish_twist(self, v_cmd: np.ndarray):
         msg = TwistStamped()
-        msg.header.stamp    = self.get_clock().now().to_msg()
+        msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = 'link_base'
-        msg.twist.linear.x  = float(v_cmd[0])
-        msg.twist.linear.y  = float(v_cmd[1])
-        msg.twist.linear.z  = float(v_cmd[2])
+        msg.twist.linear.x = float(v_cmd[0])
+        msg.twist.linear.y = float(v_cmd[1])
+        msg.twist.linear.z = float(v_cmd[2])
         self._twist_pub.publish(msg)
 
     # ── RViz markers ──────────────────────────────────────────────────────────
@@ -676,15 +681,15 @@ class ChallengeController(Node):
             return
         arr = MarkerArray()
         home = self._cart_traj.home
-        wps  = self._cart_traj.waypoints
+        wps = self._cart_traj.waypoints
 
         for i, wp in enumerate(wps):
             m = Marker()
             m.header.frame_id = 'link_base'
-            m.header.stamp    = self.get_clock().now().to_msg()
-            m.ns, m.id        = 'waypoints', i
-            m.type            = Marker.SPHERE
-            m.action          = Marker.ADD
+            m.header.stamp = self.get_clock().now().to_msg()
+            m.ns, m.id = 'waypoints', i
+            m.type = Marker.SPHERE
+            m.action = Marker.ADD
             m.pose.position.x, m.pose.position.y, m.pose.position.z = wp[0], wp[1], wp[2]
             m.pose.orientation.w = 1.0
             m.scale.x = m.scale.y = m.scale.z = 0.015
@@ -695,16 +700,22 @@ class ChallengeController(Node):
 
         line = Marker()
         line.header.frame_id = 'link_base'
-        line.header.stamp    = self.get_clock().now().to_msg()
-        line.ns, line.id     = 'path', 100
-        line.type            = Marker.LINE_STRIP
-        line.action          = Marker.ADD
-        line.scale.x         = 0.003
-        line.color           = ColorRGBA(r=0.0, g=0.9, b=0.0, a=0.6)
-        pt = Point(); pt.x, pt.y, pt.z = home; line.points.append(pt)
+        line.header.stamp = self.get_clock().now().to_msg()
+        line.ns, line.id = 'path', 100
+        line.type = Marker.LINE_STRIP
+        line.action = Marker.ADD
+        line.scale.x = 0.003
+        line.color = ColorRGBA(r=0.0, g=0.9, b=0.0, a=0.6)
+        pt = Point()
+        pt.x, pt.y, pt.z = home
+        line.points.append(pt)
         for wp in wps:
-            pt = Point(); pt.x, pt.y, pt.z = wp[0], wp[1], wp[2]; line.points.append(pt)
-        pt = Point(); pt.x, pt.y, pt.z = home; line.points.append(pt)
+            pt = Point()
+            pt.x, pt.y, pt.z = wp[0], wp[1], wp[2]
+            line.points.append(pt)
+        pt = Point()
+        pt.x, pt.y, pt.z = home
+        line.points.append(pt)
         arr.markers.append(line)
         self._marker_pub.publish(arr)
 
@@ -715,15 +726,15 @@ class ChallengeController(Node):
             return
         ctrl = "ctc" if self._use_ctc else "pdpid"
         pert = "pert" if self._pert_en else "nopert"
-        ts   = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         fname = os.path.join(self._csv_dir, f"trial_{ctrl}_{pert}_{ts}_metadata.json")
         meta = {
-            "trial_id":         f"trial_{ctrl}_{pert}_{ts}",
-            "controller":       "CTC" if self._use_ctc else ("PID" if self._use_pid else "PD"),
+            "trial_id": f"trial_{ctrl}_{pert}_{ts}",
+            "controller": "CTC" if self._use_ctc else ("PID" if self._use_pid else "PD"),
             "trajectory_centre": self._cart_traj.home.tolist(),
-            "ik_solver":        ("WeightedIKSolver wz=2.5 λ=0.015 k_task=14 k_null=1.5"
-                                 if self._use_ctc else "N/A"),
-            "control_rate_hz":  CONTROL_HZ,
+            "ik_solver": ("WeightedIKSolver wz=2.5 λ=0.015 k_task=14 k_null=1.5"
+                          if self._use_ctc else "N/A"),
+            "control_rate_hz": CONTROL_HZ,
             "initial_config_rad": Q_HOME_JOINTS.tolist(),
             "gains": {
                 "KP": np.diag(KP_CTC).tolist() if self._use_ctc else KP_PD.tolist(),
@@ -736,7 +747,7 @@ class ChallengeController(Node):
                 "std_linear": self._pert_std, "axis": self._pert_axis,
             },
             "waypoints": [
-                {"id": i+1, "label": wp[4], "x": wp[0], "y": wp[1],
+                {"id": i + 1, "label": wp[4], "x": wp[0], "y": wp[1],
                  "z": wp[2], "layer": "low" if "low" in wp[4] else "high",
                  "dwell_s": wp[3]}
                 for i, wp in enumerate(self._cart_traj.waypoints)
@@ -756,25 +767,25 @@ class ChallengeController(Node):
         os.makedirs(self._csv_dir, exist_ok=True)
         ctrl = "ctc" if self._use_ctc else "pdpid"
         pert = "pert" if self._pert_en else "nopert"
-        ts   = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         fname = os.path.join(self._csv_dir, f"trial_{ctrl}_{pert}_{ts}.csv")
         abs_path = os.path.abspath(fname)
-        self._csv_file   = open(abs_path, 'w', newline='')
+        self._csv_file = open(abs_path, 'w', newline='')
         self._csv_writer = csv.writer(self._csv_file)
         self.get_logger().info(f'CSV log → {abs_path}')
         self._csv_writer.writerow(
             ['time', 'time_rel'] +
             # Actual hardware state (updates ~9 Hz)
-            [f'q_{i}'  for i in range(6)] + [f'qd_{i}' for i in range(6)] +
+            [f'q_{i}' for i in range(6)] + [f'qd_{i}' for i in range(6)] +
             # Desired trajectory (from IK for CTC, from traj for PD)
             [f'q_des_{i}' for i in range(6)] + [f'qd_des_{i}' for i in range(6)] +
             # qdd_des: CTC=clamped IK acc; PD=zeros
             [f'qdd_des_{i}' for i in range(6)] +
             # Cartesian feedback
-            ['p_act_x','p_act_y','p_act_z'] + ['p_des_x','p_des_y','p_des_z'] +
+            ['p_act_x', 'p_act_y', 'p_act_z'] + ['p_des_x', 'p_des_y', 'p_des_z'] +
             # Commands sent to servo: CTC=filtered qd; PD=v_cmd(x,y,z)+0s
             [f'qd_cmd_{i}' for i in range(6)] + [f'sat_{i}' for i in range(6)] +
-            ['pert_enabled','pert_changed','wp_idx','wp_label','phase'] +
+            ['pert_enabled', 'pert_changed', 'wp_idx', 'wp_label', 'phase'] +
             # ── Extended diagnostics ───────────────────────────────────────────
             # state_fresh=1 when /joint_states had a new message this tick (~9 Hz)
             ['state_fresh'] +

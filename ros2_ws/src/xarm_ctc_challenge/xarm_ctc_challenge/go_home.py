@@ -68,7 +68,8 @@ class GoHome(Node):
                     f'Reached home.\n'
                     f'  Target : {np.round(Q_HOME, 4)}\n'
                     f'  Actual : {np.round(self._last_q, 4)}\n'
-                    f'  Error  : {np.round(err, 4)}  (norm={np.linalg.norm(err)*180/np.pi:.2f} deg)')
+                    f'  Error  : {np.round(err, 4)}'
+                    f'  (norm={np.linalg.norm(err)*180/np.pi:.2f} deg)')
             else:
                 self.get_logger().info('Reached home position.')
         else:

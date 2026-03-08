@@ -39,10 +39,10 @@ EPS_THRESH = 0.005   # m
 
 TRIAL_KEYS = ['ctc_nopert', 'pdpid_nopert', 'ctc_pert', 'pdpid_pert']
 TRIAL_LABELS = {
-    'ctc_nopert':   'CTC — No Perturbation',
+    'ctc_nopert': 'CTC — No Perturbation',
     'pdpid_nopert': 'PD/PID — No Perturbation',
-    'ctc_pert':     'CTC — With Perturbation',
-    'pdpid_pert':   'PD/PID — With Perturbation',
+    'ctc_pert': 'CTC — With Perturbation',
+    'pdpid_pert': 'PD/PID — With Perturbation',
 }
 
 
@@ -85,13 +85,13 @@ def compute_joint_metrics(df):
     dwell_mask = df['phase'] == 'dwell'
     for j in range(6):
         e = df[f'q_{j}'] - df[f'q_des_{j}']
-        metrics[f'rmse_j{j}']       = float(np.sqrt((e**2).mean()))
-        metrics[f'maxerr_j{j}']     = float(e.abs().max())
+        metrics[f'rmse_j{j}'] = float(np.sqrt((e**2).mean()))
+        metrics[f'maxerr_j{j}'] = float(e.abs().max())
         # Dwell-window mean absolute error: ē_{j,w} averaged over all dwell windows
         e_dwell = e[dwell_mask].abs()
         metrics[f'dwell_mean_j{j}'] = float(e_dwell.mean()) if len(e_dwell) > 0 else 0.0
-    metrics['rmse_avg']       = float(np.mean([metrics[f'rmse_j{j}']       for j in range(6)]))
-    metrics['maxerr_avg']     = float(np.mean([metrics[f'maxerr_j{j}']     for j in range(6)]))
+    metrics['rmse_avg'] = float(np.mean([metrics[f'rmse_j{j}'] for j in range(6)]))
+    metrics['maxerr_avg'] = float(np.mean([metrics[f'maxerr_j{j}'] for j in range(6)]))
     metrics['dwell_mean_avg'] = float(np.mean([metrics[f'dwell_mean_j{j}'] for j in range(6)]))
     return metrics
 
@@ -103,8 +103,8 @@ def compute_ee_metrics(df):
         (df['p_act_y'] - df['p_des_y'])**2 +
         (df['p_act_z'] - df['p_des_z'])**2
     )
-    rmse_ee  = float(np.sqrt((e_ee**2).mean()))
-    max_ee   = float(e_ee.max())
+    rmse_ee = float(np.sqrt((e_ee**2).mean()))
+    max_ee = float(e_ee.max())
     return e_ee, rmse_ee, max_ee
 
 
@@ -163,9 +163,9 @@ def plot_joint_tracking(df, key, save_dir):
 
     for j, ax in enumerate(axes.flat):
         q_meas = df[f'q_{j}'].values
-        q_des  = df[f'q_des_{j}'].values
-        ax.plot(t, np.degrees(q_des),  'k--', lw=1.5, label='Desired')
-        ax.plot(t, np.degrees(q_meas), 'b-',  lw=1.0, alpha=0.85, label='Measured')
+        q_des = df[f'q_des_{j}'].values
+        ax.plot(t, np.degrees(q_des), 'k--', lw=1.5, label='Desired')
+        ax.plot(t, np.degrees(q_meas), 'b-', lw=1.0, alpha=0.85, label='Measured')
         _highlight_dwells(ax, df)
         ax.set_title(f'Joint {j+1}')
         ax.set_xlabel('Time (s)')
@@ -187,42 +187,47 @@ def plot_task_space(df, e_ee, key, save_dir, thresh=EPS_THRESH, meta=None):
     t = df['time_rel'].values
 
     # x, y, z tracking
-    axes_xyz = [fig.add_subplot(3, 2, i+1) for i in range(3)]
+    axes_xyz = [fig.add_subplot(3, 2, i + 1) for i in range(3)]
     dims = [('x', 0), ('y', 1), ('z', 2)]
     for ax, (dim, _) in zip(axes_xyz, dims):
         ax.plot(t, df[f'p_des_{dim}'].values * 1000, 'k--', lw=1.5, label='Desired')
-        ax.plot(t, df[f'p_act_{dim}'].values * 1000, 'b-',  lw=1.0, alpha=0.85, label='Actual')
+        ax.plot(t, df[f'p_act_{dim}'].values * 1000, 'b-', lw=1.0, alpha=0.85, label='Actual')
         _highlight_dwells(ax, df)
         ax.set_title(f'{dim.upper()} tracking')
-        ax.set_xlabel('Time (s)'); ax.set_ylabel('mm')
-        ax.legend(fontsize=8); ax.grid(True)
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('mm')
+        ax.legend(fontsize=8)
+        ax.grid(True)
 
     # 3D path
     ax3d = fig.add_subplot(3, 2, 4, projection='3d')
     ax3d.plot(df['p_des_x'], df['p_des_y'], df['p_des_z'],
               'k--', lw=1.5, label='Desired', zorder=1)
     ax3d.plot(df['p_act_x'], df['p_act_y'], df['p_act_z'],
-              'b-',  lw=0.8, alpha=0.8, label='Actual', zorder=2)
+              'b-', lw=0.8, alpha=0.8, label='Actual', zorder=2)
 
     # Mark waypoints from metadata JSON (avoids runtime import of trajectory)
     if meta and 'waypoints' in meta:
         wp_list = meta['waypoints']
-        wp_xyz  = np.array([[w['x'], w['y'], w['z']] for w in wp_list])
-        z_med   = np.median(wp_xyz[:, 2])
+        wp_xyz = np.array([[w['x'], w['y'], w['z']] for w in wp_list])
+        z_med = np.median(wp_xyz[:, 2])
         high_mask = wp_xyz[:, 2] > z_med
-        low_mask  = ~high_mask
+        low_mask = ~high_mask
         ax3d.scatter(wp_xyz[high_mask, 0], wp_xyz[high_mask, 1], wp_xyz[high_mask, 2],
                      c='orange', marker='^', s=60, zorder=5, label='WP (high)')
-        ax3d.scatter(wp_xyz[low_mask, 0],  wp_xyz[low_mask, 1],  wp_xyz[low_mask, 2],
-                     c='red',    marker='o', s=60, zorder=5, label='WP (low)')
+        ax3d.scatter(wp_xyz[low_mask, 0], wp_xyz[low_mask, 1], wp_xyz[low_mask, 2],
+                     c='red', marker='o', s=60, zorder=5, label='WP (low)')
         for w in wp_list:
             ax3d.text(w['x'], w['y'], w['z'], f" {w['label']}", fontsize=5, color='dimgray')
         if 'trajectory_centre' in meta:
             hx, hy, hz = meta['trajectory_centre']
             ax3d.scatter(hx, hy, hz, c='green', marker='*', s=120, zorder=6, label='HOME')
 
-    ax3d.set_xlabel('X (m)'); ax3d.set_ylabel('Y (m)'); ax3d.set_zlabel('Z (m)')
-    ax3d.set_title('3D Path (base frame)'); ax3d.legend(fontsize=6)
+    ax3d.set_xlabel('X (m)')
+    ax3d.set_ylabel('Y (m)')
+    ax3d.set_zlabel('Z (m)')
+    ax3d.set_title('3D Path (base frame)')
+    ax3d.legend(fontsize=6)
 
     # EE error norm
     ax_err = fig.add_subplot(3, 1, 3)
@@ -236,8 +241,10 @@ def plot_task_space(df, e_ee, key, save_dir, thresh=EPS_THRESH, meta=None):
                                 where=pert_mask.values, alpha=0.15,
                                 color='orange', label='Perturbation active')
     ax_err.set_title('End-Effector Error Norm')
-    ax_err.set_xlabel('Time (s)'); ax_err.set_ylabel('Error (mm)')
-    ax_err.legend(fontsize=8); ax_err.grid(True)
+    ax_err.set_xlabel('Time (s)')
+    ax_err.set_ylabel('Error (mm)')
+    ax_err.legend(fontsize=8)
+    ax_err.grid(True)
 
     plt.tight_layout()
     fpath = os.path.join(save_dir, f'taskspace_{key}.png')
@@ -253,14 +260,16 @@ def plot_phase_portraits(df, key, save_dir):
     t = df['time_rel'].values
 
     for j, ax in enumerate(axes.flat):
-        e_j  = (df[f'q_des_{j}'] - df[f'q_{j}']).values
+        e_j = (df[f'q_des_{j}'] - df[f'q_{j}']).values
         de_j = np.gradient(e_j, t)
         ax.plot(np.degrees(e_j), np.degrees(de_j),
                 color='steelblue', alpha=0.5, lw=0.6)
         ax.scatter([0], [0], color='k', s=60, zorder=5, label='Equilibrium')
         ax.set_title(f'Joint {j+1}')
-        ax.set_xlabel('e_j (deg)'); ax.set_ylabel('ė_j (deg/s)')
-        ax.legend(fontsize=7); ax.grid(True)
+        ax.set_xlabel('e_j (deg)')
+        ax.set_ylabel('ė_j (deg/s)')
+        ax.legend(fontsize=7)
+        ax.grid(True)
 
     plt.tight_layout()
     fpath = os.path.join(save_dir, f'phase_{key}.png')
@@ -272,12 +281,12 @@ def plot_phase_portraits(df, key, save_dir):
 def save_metrics_csv(metrics_all, save_dir):
     """Save all metrics for all trials to a CSV file (submission requirement §13.1)."""
     row_keys = [
-        ('joint_rmse_avg_mrad',       'rmse_avg',       1000.0),
-        ('joint_maxerr_avg_mrad',     'maxerr_avg',     1000.0),
+        ('joint_rmse_avg_mrad', 'rmse_avg', 1000.0),
+        ('joint_maxerr_avg_mrad', 'maxerr_avg', 1000.0),
         ('joint_dwell_mean_avg_mrad', 'dwell_mean_avg', 1000.0),
-        ('ee_rmse_mm',                'ee_rmse',        1000.0),
-        ('ee_max_mm',                 'ee_max',         1000.0),
-        ('waypoint_success_pct',      'wp_success',       1.0),
+        ('ee_rmse_mm', 'ee_rmse', 1000.0),
+        ('ee_max_mm', 'ee_max', 1000.0),
+        ('waypoint_success_pct', 'wp_success', 1.0),
     ]
     fpath = os.path.join(save_dir, 'metrics_summary.csv')
     with open(fpath, 'w', newline='') as f:
@@ -296,14 +305,19 @@ def save_metrics_csv(metrics_all, save_dir):
 def plot_summary_table(metrics_all, save_dir):
     """Save the comparison table as a PNG figure for inclusion in the report (§10.5)."""
     row_defs = [
-        ('Joint RMSE avg (mrad)',       'rmse_avg',       1000.0, '.2f'),
-        ('Joint MaxErr avg (mrad)',     'maxerr_avg',     1000.0, '.2f'),
+        ('Joint RMSE avg (mrad)', 'rmse_avg', 1000.0, '.2f'),
+        ('Joint MaxErr avg (mrad)', 'maxerr_avg', 1000.0, '.2f'),
         ('Joint Dwell Mean avg (mrad)', 'dwell_mean_avg', 1000.0, '.2f'),
-        ('EE RMSE (mm)',                'ee_rmse',        1000.0, '.3f'),
-        ('EE Max Error (mm)',           'ee_max',         1000.0, '.3f'),
-        ('Waypoint Success (%)',        'wp_success',       1.0,  '.1f'),
+        ('EE RMSE (mm)', 'ee_rmse', 1000.0, '.3f'),
+        ('EE Max Error (mm)', 'ee_max', 1000.0, '.3f'),
+        ('Waypoint Success (%)', 'wp_success', 1.0, '.1f'),
     ]
-    col_labels = ['Metric', 'CTC\nNo Pert', 'PD/PID\nNo Pert', 'CTC\nWith Pert', 'PD/PID\nWith Pert']
+    col_labels = [
+        'Metric',
+        'CTC\nNo Pert',
+        'PD/PID\nNo Pert',
+        'CTC\nWith Pert',
+        'PD/PID\nWith Pert']
     table_data = []
     for (name, mkey, scale, fmt) in row_defs:
         row = [name]
@@ -345,8 +359,8 @@ def plot_summary_table(metrics_all, save_dir):
 
 def plot_comparison(dfs, e_ee_dict, pert: bool, save_dir):
     suffix = "pert" if pert else "nopert"
-    keys   = [f'ctc_{suffix}', f'pdpid_{suffix}']
-    avail  = [k for k in keys if k in dfs]
+    keys = [f'ctc_{suffix}', f'pdpid_{suffix}']
+    avail = [k for k in keys if k in dfs]
     if len(avail) < 2:
         return
 
@@ -356,12 +370,12 @@ def plot_comparison(dfs, e_ee_dict, pert: bool, save_dir):
     fig.suptitle(f'CTC vs PD/PID Comparison — {title_sfx}', fontsize=13, fontweight='bold')
 
     colors = {'ctc': 'crimson', 'pdpid': 'steelblue'}
-    ls_map  = {'ctc': '-', 'pdpid': '--'}
+    ls_map = {'ctc': '-', 'pdpid': '--'}
 
     for key in avail:
-        df  = dfs[key]
-        e   = e_ee_dict[key]
-        t   = df['time_rel'].values
+        df = dfs[key]
+        e = e_ee_dict[key]
+        t = df['time_rel'].values
         tag = key.split('_')[0]
         # Panel 0: full EE error
         axes[0].plot(t, e * 1000, color=colors[tag], ls=ls_map[tag],
@@ -376,15 +390,20 @@ def plot_comparison(dfs, e_ee_dict, pert: bool, save_dir):
                      lw=1.0, label=TRIAL_LABELS[key])
 
     for ax in axes[:2]:
-        ax.axhline(EPS_THRESH * 1000, color='k', ls=':', label=f'Threshold {EPS_THRESH*1000:.1f} mm')
-        ax.set_xlabel('Time (s)'); ax.set_ylabel('||e_EE|| (mm)')
-        ax.legend(fontsize=8); ax.grid(True)
+        ax.axhline(EPS_THRESH * 1000, color='k', ls=':',
+                   label=f'Threshold {EPS_THRESH*1000:.1f} mm')
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('||e_EE|| (mm)')
+        ax.legend(fontsize=8)
+        ax.grid(True)
         _highlight_dwells(ax, dfs[avail[0]])
     axes[0].set_title('EE Error Norm — Full Run')
     axes[1].set_title('EE Error Norm — Dwell Zoom')
     axes[2].set_title('Mean Joint Tracking Error')
-    axes[2].set_xlabel('Time (s)'); axes[2].set_ylabel('Mean |e_j| (deg)')
-    axes[2].legend(fontsize=8); axes[2].grid(True)
+    axes[2].set_xlabel('Time (s)')
+    axes[2].set_ylabel('Mean |e_j| (deg)')
+    axes[2].legend(fontsize=8)
+    axes[2].grid(True)
     _highlight_dwells(axes[2], dfs[avail[0]])
 
     # Zoom panel 1 to dwell region
@@ -410,12 +429,12 @@ def print_summary(metrics_all, dfs=None):
     print(f"\n{sep}\n{header}\n{sep}")
 
     row_keys = [
-        ('Joint RMSE avg (mrad)',        'rmse_avg',       1000.0),
-        ('Joint MaxErr avg (mrad)',      'maxerr_avg',     1000.0),
-        ('Joint Dwell Mean avg (mrad)',  'dwell_mean_avg', 1000.0),
-        ('EE RMSE (mm)',                 'ee_rmse',        1000.0),
-        ('EE MaxErr (mm)',               'ee_max',         1000.0),
-        ('Waypoint Success (%)',         'wp_success',       1.0),
+        ('Joint RMSE avg (mrad)', 'rmse_avg', 1000.0),
+        ('Joint MaxErr avg (mrad)', 'maxerr_avg', 1000.0),
+        ('Joint Dwell Mean avg (mrad)', 'dwell_mean_avg', 1000.0),
+        ('EE RMSE (mm)', 'ee_rmse', 1000.0),
+        ('EE MaxErr (mm)', 'ee_max', 1000.0),
+        ('Waypoint Success (%)', 'wp_success', 1.0),
     ]
     for (name, mkey, scale) in row_keys:
         vals = []
@@ -435,13 +454,13 @@ def print_summary(metrics_all, dfs=None):
             df = dfs[key]
             dwell_mask = df['phase'] == 'dwell'
             labels = df.loc[dwell_mask, 'wp_label'].unique()
-            e_ee = np.sqrt((df['p_act_x']-df['p_des_x'])**2 +
-                           (df['p_act_y']-df['p_des_y'])**2 +
-                           (df['p_act_z']-df['p_des_z'])**2)
+            e_ee = np.sqrt((df['p_act_x'] - df['p_des_x'])**2 +
+                           (df['p_act_y'] - df['p_des_y'])**2 +
+                           (df['p_act_z'] - df['p_des_z'])**2)
             print(f"  {TRIAL_LABELS[key]}")
             for lbl in sorted(labels):
                 mask = dwell_mask & (df['wp_label'] == lbl)
-                val  = e_ee[mask].mean() * 1000
+                val = e_ee[mask].mean() * 1000
                 print(f"    {lbl:<20} {val:.3f} mm")
     print('')
 
@@ -473,10 +492,10 @@ def main():
     save_dir = sys.argv[1] if (len(sys.argv) > 1 and os.path.isdir(sys.argv[1])) else '.'
     print(f'\nAnalysing {len(csv_map)} trial(s) → output dir: {save_dir}\n')
 
-    dfs        = {}
-    e_ee_dict  = {}
+    dfs = {}
+    e_ee_dict = {}
     metrics_all = {}
-    meta_all    = {}
+    meta_all = {}
 
     for key, fpath in csv_map.items():
         print(f'─── {TRIAL_LABELS[key]} ───')
@@ -499,8 +518,8 @@ def main():
 
         metrics_all[key] = {
             **jm,
-            'ee_rmse':    rmse_ee,
-            'ee_max':     max_ee,
+            'ee_rmse': rmse_ee,
+            'ee_max': max_ee,
             'wp_success': sr,
         }
 
@@ -515,7 +534,7 @@ def main():
 
     # Comparison plots
     plot_comparison(dfs, e_ee_dict, pert=False, save_dir=save_dir)
-    plot_comparison(dfs, e_ee_dict, pert=True,  save_dir=save_dir)
+    plot_comparison(dfs, e_ee_dict, pert=True, save_dir=save_dir)
 
     # Summary table figure + metrics CSV
     plot_summary_table(metrics_all, save_dir)

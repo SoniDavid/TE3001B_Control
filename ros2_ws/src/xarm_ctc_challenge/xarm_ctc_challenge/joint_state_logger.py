@@ -35,17 +35,17 @@ class JointStateLogger(Node):
     def __init__(self):
         super().__init__('joint_state_logger')
 
-        label   = str(self.declare_parameter('label',   'run').value)
+        label = str(self.declare_parameter('label', 'run').value)
         csv_dir = str(self.declare_parameter('csv_dir', 'data').value)
 
         os.makedirs(csv_dir, exist_ok=True)
-        ts    = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        ts = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         fname = os.path.join(csv_dir, f'jointlog_{label}_{ts}.csv')
         self._f = open(fname, 'w', newline='')
         self._w = csv.writer(self._f)
         self._w.writerow(
             ['time_s'] +
-            [f'q{j}_rad'  for j in range(1, 7)] +
+            [f'q{j}_rad' for j in range(1, 7)] +
             [f'qd{j}_rads' for j in range(1, 7)] +
             [f'effort{j}_Nm' for j in range(1, 7)]
         )
@@ -63,15 +63,15 @@ class JointStateLogger(Node):
     def _cb(self, msg: JointState):
         name_to_idx = {n: i for i, n in enumerate(msg.name)}
         t = self.get_clock().now().nanoseconds * 1e-9
-        q      = [0.0] * 6
-        qd     = [0.0] * 6
+        q = [0.0] * 6
+        qd = [0.0] * 6
         effort = [0.0] * 6
         for j, jname in enumerate(JOINT_NAMES):
             if jname in name_to_idx:
                 idx = name_to_idx[jname]
-                q[j]      = msg.position[idx] if msg.position else 0.0
-                qd[j]     = msg.velocity[idx] if msg.velocity else 0.0
-                effort[j] = msg.effort[idx]   if msg.effort   else 0.0
+                q[j] = msg.position[idx] if msg.position else 0.0
+                qd[j] = msg.velocity[idx] if msg.velocity else 0.0
+                effort[j] = msg.effort[idx] if msg.effort else 0.0
 
         self._row_buf.append([t] + q + qd + effort)
         if len(self._row_buf) >= 50:
