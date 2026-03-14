@@ -36,6 +36,17 @@ import numpy as np
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+
+def _step_axis_vector(axis: str) -> np.ndarray:
+    axis = str(axis).lower()
+    if axis == 'x':
+        return np.array([1.0, 0.0, 0.0])
+    if axis == 'y':
+        return np.array([0.0, 1.0, 0.0])
+    if axis == 'z':
+        return np.array([0.0, 0.0, 1.0])
+    raise ValueError(f"Unsupported step axis '{axis}'. Use x, y, or z.")
+
 # ---------------------------------------------------------------------------
 # Relative offset constants  [m]
 # ---------------------------------------------------------------------------
@@ -146,6 +157,10 @@ class PCBTrajectory:
     def total_time(self) -> float:
         return self._total_time
 
+    @property
+    def path_points(self) -> List[np.ndarray]:
+        return [p.copy() for p in self._pts]
+
     def at(self, t: float) -> TrajPoint:
         t = float(np.clip(t, 0.0, self._total_time))
         T = SEGMENT_SEC
@@ -166,3 +181,84 @@ class PCBTrajectory:
                                      idx, self._labels[idx], "dwell")
         return TrajPoint(self._centre.copy(), np.zeros(3), np.zeros(3),
                          len(self._pts) - 1, "home", "dwell")
+
+
+class StepTrajectory:
+    """
+    Hold the initial EE position, then apply a single Cartesian setpoint step.
+
+    This is intended for step-response experiments. The reference jumps from the
+    startup EE position to a constant offset target at `hold_before_s`, then
+    remains there for `hold_after_s`.
+    """
+
+    def __init__(
+        self,
+        centre: np.ndarray,
+        axis: str = 'x',
+        step_m: float = 0.010,
+        hold_before_s: float = 2.0,
+        hold_after_s: float = 6.0,
+    ):
+        self._centre = centre.copy()
+        self._axis = str(axis).lower()
+        self._step_m = float(step_m)
+        self._hold_before_s = max(0.0, float(hold_before_s))
+        self._hold_after_s = max(0.1, float(hold_after_s))
+
+        direction = _step_axis_vector(self._axis)
+        self._target = self._centre + self._step_m * direction
+        self._label = f"step_{self._axis}_{self._step_m:+.3f}m"
+        self._waypoints = [
+            (self._target[0], self._target[1], self._target[2],
+             self._hold_after_s, self._label)
+        ]
+        self._total_time = self._hold_before_s + self._hold_after_s
+
+    @property
+    def home(self) -> np.ndarray:
+        return self._centre.copy()
+
+    @property
+    def waypoints(self) -> List[Tuple]:
+        return self._waypoints
+
+    @property
+    def total_time(self) -> float:
+        return self._total_time
+
+    @property
+    def path_points(self) -> List[np.ndarray]:
+        return [self._centre.copy(), self._target.copy()]
+
+    def at(self, t: float) -> TrajPoint:
+        t = float(np.clip(t, 0.0, self._total_time))
+        if t < self._hold_before_s:
+            return TrajPoint(
+                self._centre.copy(), np.zeros(3), np.zeros(3),
+                0, 'home', 'dwell')
+        return TrajPoint(
+            self._target.copy(), np.zeros(3), np.zeros(3),
+            1, self._label, 'dwell')
+
+
+def build_trajectory(
+    centre: np.ndarray,
+    mode: str = 'pcb',
+    step_axis: str = 'x',
+    step_m: float = 0.010,
+    step_hold_before_s: float = 2.0,
+    step_hold_after_s: float = 6.0,
+):
+    mode = str(mode).lower()
+    if mode == 'pcb':
+        return PCBTrajectory(centre=centre)
+    if mode == 'step':
+        return StepTrajectory(
+            centre=centre,
+            axis=step_axis,
+            step_m=step_m,
+            hold_before_s=step_hold_before_s,
+            hold_after_s=step_hold_after_s,
+        )
+    raise ValueError(f"Unsupported trajectory_mode '{mode}'. Use 'pcb' or 'step'.")

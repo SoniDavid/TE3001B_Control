@@ -28,6 +28,8 @@ import os
 import threading
 from datetime import datetime
 
+from rcl_interfaces.msg import ParameterDescriptor
+
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -43,7 +45,7 @@ from tf2_ros import Buffer, TransformListener
 from .kinematics import forward_kinematics, position_jacobian, JOINT_NAMES
 from .dynamics import get_dynamics
 from .ik_solver import WeightedIKSolver
-from .trajectory import PCBTrajectory
+from .trajectory import PCBTrajectory, build_trajectory
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -105,6 +107,14 @@ class ChallengeController(Node):
         self._pert_en = bool(self.declare_parameter('perturbation_enabled', False).value)
         self._loop = bool(self.declare_parameter('loop_trajectory', False).value)
         self._csv_dir = str(self.declare_parameter('csv_dir', 'data').value)
+        self._traj_mode = str(self.declare_parameter('trajectory_mode', 'pcb').value).lower()
+        _axis_raw = self.declare_parameter(
+            'step_axis', 'x', ParameterDescriptor(dynamic_typing=True)).value
+        # YAML 1.1 parses bare 'y' as boolean True — map it back to 'y'
+        self._step_axis = 'y' if _axis_raw is True else str(_axis_raw).lower()
+        self._step_size_m = float(self.declare_parameter('step_size_m', 0.010).value)
+        self._step_hold_before_s = float(self.declare_parameter('step_hold_before_s', 2.0).value)
+        self._step_hold_after_s = float(self.declare_parameter('step_hold_after_s', 6.0).value)
 
         self._pert_mode = str(self.declare_parameter('pert_mode', 'gaussian').value)
         self._pert_std = float(self.declare_parameter('pert_std_linear', 0.5).value)
@@ -218,6 +228,7 @@ class ChallengeController(Node):
         self.get_logger().info(
             f"ChallengeController started — {mode_str}  "
             f"pert={'ON' if self._pert_en else 'off'}  "
+            f"traj={self._traj_mode}  "
             f"joint_states_topic='{self._js_topic}'  "
             f"Waiting for joint states to build trajectory...")
 
@@ -294,7 +305,14 @@ class ChallengeController(Node):
                 return   # TF2 not ready yet — try next tick
             with self._state_lock:
                 q_init = self._q.copy()
-            self._cart_traj = PCBTrajectory(centre=p_centre)
+            self._cart_traj = build_trajectory(
+                centre=p_centre,
+                mode=self._traj_mode,
+                step_axis=self._step_axis,
+                step_m=self._step_size_m,
+                step_hold_before_s=self._step_hold_before_s,
+                step_hold_after_s=self._step_hold_after_s,
+            )
             self._ik.reset(q_init)
             self._q_pred = q_init.copy()
             self._qd_pred = np.zeros(6)
@@ -306,9 +324,13 @@ class ChallengeController(Node):
             self._traj_ready = True
             self._last_log_t = self.get_clock().now()
             mode_str = "CTC" if self._use_ctc else ("PID" if self._use_pid else "PD")
+            traj_str = (
+                f"step(axis={self._step_axis}, amp={self._step_size_m:.3f}m, "
+                f"hold_before={self._step_hold_before_s:.1f}s, hold_after={self._step_hold_after_s:.1f}s)"
+                if self._traj_mode == 'step' else 'pcb')
             self.get_logger().info(
                 f"TF2 centre: {np.round(p_centre, 4)}\n"
-                f"  {mode_str} running — total trajectory: "
+                f"  {mode_str} running — trajectory={traj_str}  total: "
                 f"{self._cart_traj.total_time:.1f} s"
             )
             self._publish_waypoint_markers()
@@ -693,9 +715,14 @@ class ChallengeController(Node):
             m.pose.position.x, m.pose.position.y, m.pose.position.z = wp[0], wp[1], wp[2]
             m.pose.orientation.w = 1.0
             m.scale.x = m.scale.y = m.scale.z = 0.015
-            is_place = 'low' in wp[4]
-            m.color = (ColorRGBA(r=1.0, g=0.3, b=0.0, a=1.0) if is_place
-                       else ColorRGBA(r=0.2, g=0.6, b=1.0, a=0.7))
+            label = wp[4]
+            is_place = 'low' in label
+            is_step = 'step_' in label
+            m.color = (
+                ColorRGBA(r=0.2, g=0.9, b=0.2, a=0.9) if is_step else
+                ColorRGBA(r=1.0, g=0.3, b=0.0, a=1.0) if is_place else
+                ColorRGBA(r=0.2, g=0.6, b=1.0, a=0.7)
+            )
             arr.markers.append(m)
 
         line = Marker()
@@ -706,16 +733,13 @@ class ChallengeController(Node):
         line.action = Marker.ADD
         line.scale.x = 0.003
         line.color = ColorRGBA(r=0.0, g=0.9, b=0.0, a=0.6)
-        pt = Point()
-        pt.x, pt.y, pt.z = home
-        line.points.append(pt)
-        for wp in wps:
+        path_pts = getattr(self._cart_traj, 'path_points', None)
+        if path_pts is None:
+            path_pts = [home] + [np.array(wp[:3]) for wp in wps] + [home]
+        for p in path_pts:
             pt = Point()
-            pt.x, pt.y, pt.z = wp[0], wp[1], wp[2]
+            pt.x, pt.y, pt.z = float(p[0]), float(p[1]), float(p[2])
             line.points.append(pt)
-        pt = Point()
-        pt.x, pt.y, pt.z = home
-        line.points.append(pt)
         arr.markers.append(line)
         self._marker_pub.publish(arr)
 
@@ -731,7 +755,14 @@ class ChallengeController(Node):
         meta = {
             "trial_id": f"trial_{ctrl}_{pert}_{ts}",
             "controller": "CTC" if self._use_ctc else ("PID" if self._use_pid else "PD"),
+            "trajectory_mode": self._traj_mode,
             "trajectory_centre": self._cart_traj.home.tolist(),
+            "trajectory_params": {
+                "step_axis": self._step_axis,
+                "step_size_m": self._step_size_m,
+                "step_hold_before_s": self._step_hold_before_s,
+                "step_hold_after_s": self._step_hold_after_s,
+            },
             "ik_solver": ("WeightedIKSolver wz=2.5 λ=0.015 k_task=14 k_null=1.5"
                           if self._use_ctc else "N/A"),
             "control_rate_hz": CONTROL_HZ,
@@ -748,7 +779,11 @@ class ChallengeController(Node):
             },
             "waypoints": [
                 {"id": i + 1, "label": wp[4], "x": wp[0], "y": wp[1],
-                 "z": wp[2], "layer": "low" if "low" in wp[4] else "high",
+                 "z": wp[2],
+                 "layer": (
+                     "step" if "step_" in wp[4] else
+                     "low" if "low" in wp[4] else "high"
+                 ),
                  "dwell_s": wp[3]}
                 for i, wp in enumerate(self._cart_traj.waypoints)
             ],
